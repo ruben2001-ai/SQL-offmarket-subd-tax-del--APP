@@ -2,16 +2,62 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Lead, PipelineStage } from "@/lib/types";
-import { PIPELINE_STAGES, PIPELINE_STAGE_COLORS, OUTREACH_STATUS_COLORS } from "@/lib/types";
+import type { AnyLead, DatasetId, PipelineStage } from "@/lib/types";
+import { DATASETS, PIPELINE_STAGES, PIPELINE_STAGE_COLORS, OUTREACH_STATUS_COLORS } from "@/lib/types";
+import { useDataset } from "@/lib/dataset-context";
 import {
-  MASTER_SHEET_GROUPS,
+  COLUMN_GROUPS_BY_DATASET,
   formatCell,
   telHref,
 } from "@/lib/master-sheet-columns";
 
+// Which fields the free-text search box checks, per dataset — the two tables
+// name the equivalent owner/address/phone fields differently.
+const SEARCH_FIELDS_BY_DATASET: Record<string, string[]> = {
+  subdivide: [
+    "owner_first_name",
+    "owner_last_name",
+    "apn",
+    "parcel_address",
+    "city",
+    "phone_1",
+    "phone_2",
+    "email",
+  ],
+  tax_delinquent: [
+    "owner_1_full_name",
+    "owner_2_full_name",
+    "apn",
+    "parcel_full_address",
+    "mail_full_address",
+    "parcel_city",
+    "phone_1",
+    "phone_2",
+    "email_1",
+    "email_2",
+  ],
+};
+
 export default function MasterSheetTable() {
-  const [leads, setLeads] = useState<Lead[]>([]);
+  const { dataset } = useDataset();
+  const table = DATASETS[dataset].table;
+
+  // Remounting on `table` change (rather than resetting filter state inside
+  // an effect) gives every dataset switch a clean slate for free.
+  return <MasterSheetTableInner key={table} dataset={dataset} table={table} />;
+}
+
+function MasterSheetTableInner({
+  dataset,
+  table,
+}: {
+  dataset: DatasetId;
+  table: string;
+}) {
+  const groups = COLUMN_GROUPS_BY_DATASET[dataset];
+  const searchFields = SEARCH_FIELDS_BY_DATASET[dataset];
+
+  const [leads, setLeads] = useState<AnyLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -25,7 +71,7 @@ export default function MasterSheetTable() {
     async function load() {
       setLoading(true);
       const { data, error } = await supabase
-        .from("subdivide_outreach_leads")
+        .from(table)
         .select("*")
         .order("created_at", { ascending: false })
         .limit(1000);
@@ -34,7 +80,7 @@ export default function MasterSheetTable() {
       if (error) {
         setError(error.message);
       } else {
-        setLeads((data ?? []) as Lead[]);
+        setLeads((data ?? []) as AnyLead[]);
         setError(null);
       }
       setLoading(false);
@@ -44,7 +90,7 @@ export default function MasterSheetTable() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [table]);
 
   const campaigns = useMemo(() => {
     const set = new Set(leads.map((l) => l.campaign).filter(Boolean) as string[]);
@@ -65,22 +111,15 @@ export default function MasterSheetTable() {
       if (statusFilter !== "All" && l.outreach_status !== statusFilter)
         return false;
       if (!q) return true;
-      const haystack = [
-        l.owner_first_name,
-        l.owner_last_name,
-        l.apn,
-        l.parcel_address,
-        l.city,
-        l.phone_1,
-        l.phone_2,
-        l.email,
-      ]
+      const row = l as unknown as Record<string, unknown>;
+      const haystack = searchFields
+        .map((key) => row[key])
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [leads, search, campaign, statusFilter]);
+  }, [leads, search, campaign, statusFilter, searchFields]);
 
   async function updatePipelineStage(id: string, stage: PipelineStage) {
     setLeads((prev) =>
@@ -88,7 +127,7 @@ export default function MasterSheetTable() {
     );
     const supabase = createClient();
     const { error } = await supabase
-      .from("subdivide_outreach_leads")
+      .from(table)
       .update({ pipeline_stage: stage })
       .eq("id", id);
     if (error) {
@@ -113,7 +152,7 @@ export default function MasterSheetTable() {
         >
           {campaigns.map((c) => (
             <option key={c} value={c}>
-              {c === "All" ? "All counties" : c}
+              {c === "All" ? "All campaigns" : c}
             </option>
           ))}
         </select>
@@ -147,7 +186,7 @@ export default function MasterSheetTable() {
                 rowSpan={2}
                 className="sticky left-0 z-30 min-w-[90px] border-b border-r border-slate-300 bg-slate-100 px-2 py-1 text-left font-semibold text-slate-700"
               >
-                County
+                Campaign
               </th>
               <th
                 rowSpan={2}
@@ -155,7 +194,7 @@ export default function MasterSheetTable() {
               >
                 Pipeline Stage
               </th>
-              {MASTER_SHEET_GROUPS.map((group) => (
+              {groups.map((group) => (
                 <th
                   key={group.label}
                   colSpan={group.columns.length}
@@ -166,7 +205,7 @@ export default function MasterSheetTable() {
               ))}
             </tr>
             <tr>
-              {MASTER_SHEET_GROUPS.flatMap((group) =>
+              {groups.flatMap((group) =>
                 group.columns.map((col) => (
                   <th
                     key={String(col.key)}
@@ -212,9 +251,11 @@ export default function MasterSheetTable() {
                     ))}
                   </select>
                 </td>
-                {MASTER_SHEET_GROUPS.flatMap((group) =>
+                {groups.flatMap((group) =>
                   group.columns.map((col) => {
-                    const value = lead[col.key];
+                    const value = (lead as unknown as Record<string, unknown>)[
+                      col.key
+                    ];
                     const isStatus = col.key === "outreach_status";
                     const statusClass =
                       isStatus && value
@@ -282,7 +323,7 @@ export default function MasterSheetTable() {
             {!loading && filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={2 + MASTER_SHEET_GROUPS.flatMap((g) => g.columns).length}
+                  colSpan={2 + groups.flatMap((g) => g.columns).length}
                   className="px-4 py-8 text-center text-slate-500"
                 >
                   No leads match the current filters.

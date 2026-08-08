@@ -2,13 +2,30 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Lead, PipelineStage } from "@/lib/types";
-import { PIPELINE_STAGES, PIPELINE_STAGE_COLORS } from "@/lib/types";
+import type { AnyLead, DatasetId, PipelineStage } from "@/lib/types";
+import { DATASETS, PIPELINE_STAGES, PIPELINE_STAGE_COLORS } from "@/lib/types";
+import { useDataset } from "@/lib/dataset-context";
+import { getLeadDisplay } from "@/lib/lead-adapter";
 import { formatMoney, formatNumber, telHref, formatPhone } from "@/lib/format";
 import StatTile from "@/components/stat-tile";
 
 export default function PipelineBoard() {
-  const [leads, setLeads] = useState<Lead[]>([]);
+  const { dataset } = useDataset();
+  const table = DATASETS[dataset].table;
+
+  // Remounting on `table` change (rather than resetting filter state inside
+  // an effect) gives every dataset switch a clean slate for free.
+  return <PipelineBoardInner key={table} dataset={dataset} table={table} />;
+}
+
+function PipelineBoardInner({
+  dataset,
+  table,
+}: {
+  dataset: DatasetId;
+  table: string;
+}) {
+  const [leads, setLeads] = useState<AnyLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [campaign, setCampaign] = useState<string>("All");
@@ -20,7 +37,7 @@ export default function PipelineBoard() {
     async function load() {
       setLoading(true);
       const { data, error } = await supabase
-        .from("subdivide_outreach_leads")
+        .from(table)
         .select("*")
         .order("created_at", { ascending: false })
         .limit(1000);
@@ -28,7 +45,7 @@ export default function PipelineBoard() {
       if (cancelled) return;
       if (error) setError(error.message);
       else {
-        setLeads((data ?? []) as Lead[]);
+        setLeads((data ?? []) as AnyLead[]);
         setError(null);
       }
       setLoading(false);
@@ -38,7 +55,7 @@ export default function PipelineBoard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [table]);
 
   const campaigns = useMemo(() => {
     const set = new Set(leads.map((l) => l.campaign).filter(Boolean) as string[]);
@@ -51,7 +68,7 @@ export default function PipelineBoard() {
   );
 
   const byStage = useMemo(() => {
-    const map = new Map<PipelineStage, Lead[]>();
+    const map = new Map<PipelineStage, AnyLead[]>();
     for (const stage of PIPELINE_STAGES) map.set(stage, []);
     for (const lead of filtered) {
       const stage = (lead.pipeline_stage as PipelineStage) ?? "Leads";
@@ -62,9 +79,12 @@ export default function PipelineBoard() {
 
   const kpis = useMemo(() => {
     const totalLeads = filtered.length;
-    const totalAcreage = filtered.reduce((s, l) => s + (l.acreage ?? 0), 0);
+    const totalAcreage = filtered.reduce(
+      (s, l) => s + (getLeadDisplay(l, dataset).acreage ?? 0),
+      0,
+    );
     const totalValue = filtered.reduce(
-      (s, l) => s + (l.market_value_estimate ?? 0),
+      (s, l) => s + (getLeadDisplay(l, dataset).value ?? 0),
       0,
     );
     const offered = byStage.get("Offered") ?? [];
@@ -88,7 +108,7 @@ export default function PipelineBoard() {
       acceptedValue,
       winRate,
     };
-  }, [filtered, byStage]);
+  }, [filtered, byStage, dataset]);
 
   async function updatePipelineStage(id: string, stage: PipelineStage) {
     setLeads((prev) =>
@@ -96,7 +116,7 @@ export default function PipelineBoard() {
     );
     const supabase = createClient();
     const { error } = await supabase
-      .from("subdivide_outreach_leads")
+      .from(table)
       .update({ pipeline_stage: stage })
       .eq("id", id);
     if (error) setError(`Failed to save pipeline stage: ${error.message}`);
@@ -115,7 +135,7 @@ export default function PipelineBoard() {
         >
           {campaigns.map((c) => (
             <option key={c} value={c}>
-              {c === "All" ? "All counties" : c}
+              {c === "All" ? "All campaigns" : c}
             </option>
           ))}
         </select>
@@ -162,7 +182,7 @@ export default function PipelineBoard() {
         {PIPELINE_STAGES.map((stage) => {
           const stageLeads = byStage.get(stage) ?? [];
           const stageValue = stageLeads.reduce(
-            (s, l) => s + (l.market_value_estimate ?? 0),
+            (s, l) => s + (getLeadDisplay(l, dataset).value ?? 0),
             0,
           );
           return (
@@ -191,6 +211,7 @@ export default function PipelineBoard() {
                   <LeadCard
                     key={lead.id}
                     lead={lead}
+                    dataset={dataset}
                     onStageChange={(s) => updatePipelineStage(lead.id, s)}
                   />
                 ))}
@@ -210,14 +231,14 @@ export default function PipelineBoard() {
 
 function LeadCard({
   lead,
+  dataset,
   onStageChange,
 }: {
-  lead: Lead;
+  lead: AnyLead;
+  dataset: DatasetId;
   onStageChange: (stage: PipelineStage) => void;
 }) {
-  const ownerName =
-    [lead.owner_first_name, lead.owner_last_name].filter(Boolean).join(" ") ||
-    "Unknown owner";
+  const { ownerName, acreage, address } = getLeadDisplay(lead, dataset);
   const price = lead.counter_amount || lead.offer_amount
     ? lead.counter_amount || formatMoney(lead.offer_amount)
     : null;
@@ -233,8 +254,8 @@ function LeadCard({
         )}
       </div>
       <div className="mt-1 text-xs text-slate-500">
-        {lead.acreage ? `${formatNumber(lead.acreage)} ac` : null}
-        {lead.parcel_address ? ` · ${lead.parcel_address}` : null}
+        {acreage ? `${formatNumber(acreage)} ac` : null}
+        {address ? ` · ${address}` : null}
       </div>
       {lead.apn && (
         <div className="mt-0.5 text-[11px] text-slate-400">APN {lead.apn}</div>

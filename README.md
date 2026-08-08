@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Land Leads Dashboard
 
-## Getting Started
+Next.js + Supabase dashboard for Ruben's off-market land lead pipelines. Two
+datasets, one app: **Off-Market Subdivide** leads and **NC Tax Delinquent**
+leads, switchable from the header. Each dataset gets a **Master Sheet** tab
+(a filterable, editable mirror of the outreach Excel master) and a
+**Pipeline Overview** tab (KPI tiles + a kanban-style board across
+`pipeline_stage`).
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router, Turbopack), TypeScript, Tailwind CSS
+- Supabase (Postgres + Auth). Client-side reads/writes via `@supabase/ssr`,
+  RLS-gated to authenticated users.
+
+## Getting started
+
+```bash
+npm install
+```
+
+Create `.env.local` in the project root:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=https://vynlsywztmbolhzxxsrl.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<publishable/anon key from Supabase project settings>
+```
+
+These are public, client-safe values (RLS does the actual access control) —
+see [Supabase's docs](https://supabase.com/docs/guides/api/api-keys) if you
+need to fetch them again.
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). There's no seeded
+account — use the **sign-up** option on the login page to create the first
+one; Supabase Auth handles the rest.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Data model
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Two independent tables in the same Supabase project, both with a
+`pipeline_stage` column (`Leads → Underwritten → Outreached → Offered →
+Follow-up → Accepted / Rejected / Long-term Follow-up`) and RLS restricted to
+`authenticated` read/write:
 
-## Learn More
+- **`subdivide_outreach_leads`** — off-market subdivide-candidate parcels,
+  cold-landowner SMS/email outreach (see `off-market-subdivide-outreach-cold-landowners`
+  skill for the day-to-day routine that populates/updates this table).
+- **`tax_delinquent_leads`** — NC tax-delinquent parcel owners. Curated
+  columns cover contact info, mailing/parcel address, tax & value, phones
+  1–7, and outreach/offer/call tracking (same shape/conventions as the
+  subdivide table). Everything else from the source LightBox export (flood
+  zone, slope/buildability, sale history, school district, skip-traced
+  relative contacts, etc.) lives losslessly in the `raw` JSONB column —
+  query it with `raw->>'PROP: Field Name'`.
 
-To learn more about Next.js, take a look at the following resources:
+`src/lib/types.ts` defines both row shapes (`Lead`, `TaxDelinquentLead`) and
+the `DATASETS` config map. `src/lib/dataset-context.tsx` holds which dataset
+is active (persisted to `localStorage`, switched via the header dropdown);
+`src/lib/lead-adapter.ts` normalizes the handful of fields (owner name,
+acreage, value, address) that differ in name between the two tables so the
+Pipeline tab's KPIs/cards work against either dataset without branching
+everywhere.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Bulk-loading a new outreach master into Supabase
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The SQL MCP path chokes on payloads this size (500+ columns × hundreds of
+rows). The reliable path is Supabase Studio's own CSV importer:
 
-## Deploy on Vercel
+1. Convert the outreach master `.xlsx` to a CSV whose header row matches the
+   target table's column names exactly (see `tax_delinquent_leads` for the
+   pattern: curated columns + a catch-all `raw` JSONB column holding
+   everything else as JSON text).
+2. Supabase dashboard → **Table Editor** → select the table → **Insert** →
+   **Import data from CSV** → upload → confirm the column mapping → Import.
+3. Verify row count matches the source sheet(s).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploying
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Localhost is fine while the dashboard is still being built out. When it's
+ready to be a daily tool: connect the repo to Vercel and set
+`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` as project env
+vars there (same values as `.env.local`) — Next.js's own platform, deploys
+on every push.

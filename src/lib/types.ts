@@ -1,3 +1,21 @@
+export type DatasetId = "subdivide" | "tax_delinquent";
+
+export const DATASETS: Record<
+  DatasetId,
+  { label: string; table: string; shortLabel: string }
+> = {
+  subdivide: {
+    label: "Off-Market Subdivide",
+    shortLabel: "Subdivide",
+    table: "subdivide_outreach_leads",
+  },
+  tax_delinquent: {
+    label: "NC Tax Delinquent",
+    shortLabel: "Tax Delinquent",
+    table: "tax_delinquent_leads",
+  },
+};
+
 export type Lead = {
   id: string;
   campaign: string | null;
@@ -75,6 +93,106 @@ export type Lead = {
   pipeline_stage: PipelineStage | null;
   created_at: string | null;
 };
+
+export type TaxDelinquentLead = {
+  id: string;
+  campaign: string | null;
+  source_sheet: string | null;
+
+  reach_method: string | null;
+  dnc_status: string | null;
+  deceased: string | null;
+  facebook: string | null;
+  linkedin: string | null;
+
+  apn: string | null;
+  property_id: number | null;
+  lot_acres: number | null;
+  total_acreage_owner: number | null;
+  parcel_count_owner: number | null;
+  primary_parcel: string | null;
+  sub_lots: number | null;
+  avg_lot_acres: number | null;
+
+  owner_1_full_name: string | null;
+  owner_2_full_name: string | null;
+  owner_1_first_name: string | null;
+  owner_1_last_name: string | null;
+
+  mail_full_address: string | null;
+  mail_city: string | null;
+  mail_state: string | null;
+  mail_zip: string | null;
+
+  parcel_full_address: string | null;
+  parcel_city: string | null;
+  parcel_state: string | null;
+  parcel_county: string | null;
+  parcel_zip: string | null;
+
+  land_use: string | null;
+  road_frontage: number | null;
+  total_market_value: number | null;
+  total_assessed_value: number | null;
+  tax_amt: number | null;
+  tax_delinquent_year: number | null;
+  zoning: string | null;
+  subdivision_name: string | null;
+  age: string | null;
+
+  land_locked: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  parcel_link: string | null;
+
+  active_phone: string | null;
+  active_phone_index: number | null;
+  email_1: string | null;
+  email_2: string | null;
+
+  phone_1: string | null;
+  phone_1_type: string | null;
+  phone_2: string | null;
+  phone_2_type: string | null;
+  phone_3: string | null;
+  phone_3_type: string | null;
+  phone_4: string | null;
+  phone_4_type: string | null;
+  phone_5: string | null;
+  phone_5_type: string | null;
+  phone_6: string | null;
+  phone_6_type: string | null;
+  phone_7: string | null;
+  phone_7_type: string | null;
+
+  skip_reason: string | null;
+  quo_message_sent: string | null;
+  quo_message: string | null;
+  quo_response: string | null;
+  response_date: string | null;
+  response_type: string | null;
+  follow_up_1_date: string | null;
+  follow_up_2_date: string | null;
+
+  outreach_status: string | null;
+  contact_quality: string | null;
+  notes: string | null;
+
+  offer_made: string | null;
+  offer_amount: number | null;
+  offer_status: string | null;
+  counter_amount: string | null;
+
+  call_completed: string | null;
+  call_date: string | null;
+  call_notes: string | null;
+
+  pipeline_stage: PipelineStage | null;
+  raw: Record<string, unknown> | null;
+  created_at: string | null;
+};
+
+export type AnyLead = Lead | TaxDelinquentLead;
 
 export const PIPELINE_STAGES = [
   "Leads",
