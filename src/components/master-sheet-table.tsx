@@ -9,7 +9,15 @@ import {
   COLUMN_GROUPS_BY_DATASET,
   formatCell,
   telHref,
+  type ColumnKind,
 } from "@/lib/master-sheet-columns";
+
+type SortDir = "asc" | "desc";
+
+function SortIndicator({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return <span className="ml-1 inline-block w-2.5 text-slate-300">↕</span>;
+  return <span className="ml-1 inline-block w-2.5 text-slate-900">{dir === "asc" ? "↑" : "↓"}</span>;
+}
 
 // Which fields the free-text search box checks, per dataset — the two tables
 // name the equivalent owner/address/phone fields differently.
@@ -63,6 +71,8 @@ function MasterSheetTableInner({
   const [search, setSearch] = useState("");
   const [campaign, setCampaign] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   useEffect(() => {
     const supabase = createClient();
@@ -135,6 +145,73 @@ function MasterSheetTableInner({
     }
   }
 
+  async function updateField(id: string, column: string, value: string) {
+    setLeads((prev) =>
+      prev.map((l) => (l.id === id ? ({ ...l, [column]: value } as AnyLead) : l)),
+    );
+    const supabase = createClient();
+    const { error } = await supabase
+      .from(table)
+      .update({ [column]: value || null })
+      .eq("id", id);
+    if (error) {
+      setError(`Failed to save ${column}: ${error.message}`);
+    }
+  }
+
+  function toggleSort(key: string) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  const kindByKey = useMemo(() => {
+    const map: Record<string, ColumnKind> = {};
+    for (const g of groups) for (const c of g.columns) map[c.key] = c.kind;
+    return map;
+  }, [groups]);
+
+  function sortValue(lead: AnyLead, key: string): number | string | null {
+    if (key === "pipeline_stage") {
+      const stage = (lead.pipeline_stage as PipelineStage) ?? "Leads";
+      return PIPELINE_STAGES.indexOf(stage);
+    }
+    const raw = (lead as unknown as Record<string, unknown>)[key];
+    if (raw === null || raw === undefined || raw === "") return null;
+    const kind = kindByKey[key];
+    if (kind === "money" || kind === "number") {
+      const n = typeof raw === "number" ? raw : parseFloat(String(raw));
+      return Number.isNaN(n) ? null : n;
+    }
+    if (kind === "date") {
+      const t = new Date(raw as string).getTime();
+      return Number.isNaN(t) ? null : t;
+    }
+    return String(raw).toLowerCase();
+  }
+
+  const sorted = useMemo(() => {
+    if (!sortKey) return filtered;
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      const va = sortValue(a, sortKey);
+      const vb = sortValue(b, sortKey);
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      const cmp =
+        typeof va === "number" && typeof vb === "number"
+          ? va - vb
+          : String(va).localeCompare(String(vb));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return arr;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, sortKey, sortDir, kindByKey]);
+
   return (
     <div className="flex h-[calc(100vh-57px)] flex-col">
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
@@ -184,15 +261,19 @@ function MasterSheetTableInner({
             <tr>
               <th
                 rowSpan={2}
-                className="sticky left-0 z-30 min-w-[90px] border-b border-r border-slate-300 bg-slate-100 px-2 py-1 text-left font-semibold text-slate-700"
+                onClick={() => toggleSort("campaign")}
+                className="sticky left-0 z-30 min-w-[90px] cursor-pointer select-none border-b border-r border-slate-300 bg-slate-100 px-2 py-1 text-left font-semibold text-slate-700 hover:bg-slate-200"
               >
                 Campaign
+                <SortIndicator active={sortKey === "campaign"} dir={sortDir} />
               </th>
               <th
                 rowSpan={2}
-                className="sticky left-[90px] z-30 min-w-[160px] border-b border-r border-slate-300 bg-slate-100 px-2 py-1 text-left font-semibold text-slate-700"
+                onClick={() => toggleSort("pipeline_stage")}
+                className="sticky left-[90px] z-30 min-w-[160px] cursor-pointer select-none border-b border-r border-slate-300 bg-slate-100 px-2 py-1 text-left font-semibold text-slate-700 hover:bg-slate-200"
               >
                 Pipeline Stage
+                <SortIndicator active={sortKey === "pipeline_stage"} dir={sortDir} />
               </th>
               {groups.map((group) => (
                 <th
@@ -210,16 +291,18 @@ function MasterSheetTableInner({
                   <th
                     key={String(col.key)}
                     style={{ minWidth: col.width }}
-                    className="border-b border-r border-slate-200 bg-slate-100 px-2 py-1 text-left font-medium text-slate-600 whitespace-nowrap"
+                    onClick={() => toggleSort(col.key)}
+                    className="cursor-pointer select-none border-b border-r border-slate-200 bg-slate-100 px-2 py-1 text-left font-medium text-slate-600 whitespace-nowrap hover:bg-slate-200"
                   >
                     {col.header}
+                    <SortIndicator active={sortKey === col.key} dir={sortDir} />
                   </th>
                 )),
               )}
             </tr>
           </thead>
           <tbody>
-            {filtered.map((lead, i) => (
+            {sorted.map((lead, i) => (
               <tr
                 key={lead.id}
                 className={i % 2 === 0 ? "bg-white" : "bg-slate-50"}
@@ -261,6 +344,27 @@ function MasterSheetTableInner({
                       isStatus && value
                         ? OUTREACH_STATUS_COLORS[value as string]
                         : "";
+                    if (col.key === "notes" || col.key === "call_notes") {
+                      return (
+                        <td
+                          key={String(col.key)}
+                          className="border-b border-r border-slate-200 p-0"
+                        >
+                          <textarea
+                            defaultValue={(value as string) ?? ""}
+                            placeholder="Add a note…"
+                            rows={1}
+                            onBlur={(e) => {
+                              const next = e.target.value;
+                              if (next !== ((value as string) ?? "")) {
+                                updateField(lead.id, col.key, next);
+                              }
+                            }}
+                            className="block w-full min-w-[260px] resize-y border-0 bg-transparent px-2 py-1 text-xs focus:bg-amber-50 focus:outline-none focus:ring-1 focus:ring-amber-300"
+                          />
+                        </td>
+                      );
+                    }
                     if (col.kind === "link" && value) {
                       return (
                         <td
