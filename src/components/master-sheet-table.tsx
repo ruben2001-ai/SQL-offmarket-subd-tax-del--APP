@@ -9,6 +9,7 @@ import {
   COLUMN_GROUPS_BY_DATASET,
   formatCell,
   telHref,
+  type Column,
   type ColumnKind,
 } from "@/lib/master-sheet-columns";
 
@@ -55,6 +56,8 @@ export default function MasterSheetTable() {
   return <MasterSheetTableInner key={table} dataset={dataset} table={table} />;
 }
 
+const COLUMN_ORDER_STORAGE_PREFIX = "master-sheet-column-order:";
+
 function MasterSheetTableInner({
   dataset,
   table,
@@ -64,6 +67,69 @@ function MasterSheetTableInner({
 }) {
   const groups = COLUMN_GROUPS_BY_DATASET[dataset];
   const searchFields = SEARCH_FIELDS_BY_DATASET[dataset];
+
+  // Flat column list, group boundaries dropped in favor of free horizontal
+  // reordering — this is the "default order" the reset button restores.
+  const defaultColumns = useMemo(() => groups.flatMap((g) => g.columns), [groups]);
+  const columnsByKey = useMemo(() => {
+    const map: Record<string, Column> = {};
+    for (const c of defaultColumns) map[c.key] = c;
+    return map;
+  }, [defaultColumns]);
+  const storageKey = COLUMN_ORDER_STORAGE_PREFIX + table;
+
+  const [columnOrder, setColumnOrder] = useState<string[]>(() =>
+    defaultColumns.map((c) => c.key),
+  );
+  const [dragKey, setDragKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(storageKey);
+    if (!stored) return;
+    try {
+      const keys: string[] = JSON.parse(stored);
+      const known = new Set(defaultColumns.map((c) => c.key));
+      const valid = keys.filter((k) => known.has(k));
+      // Any column added to the schema since the order was saved gets
+      // appended at the end rather than silently dropped.
+      const missing = defaultColumns.map((c) => c.key).filter((k) => !valid.includes(k));
+      // One-time restore of a persisted UI preference on mount — this component
+      // already remounts fresh per dataset (key={table} in the parent), so this
+      // never re-runs mid-session; it's the SSR-safe alternative to a lazy
+      // useState initializer, which would read localStorage during server
+      // render (where it doesn't exist) and mismatch on hydration.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (valid.length) setColumnOrder([...valid, ...missing]);
+    } catch {
+      // ignore malformed storage
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+
+  const columns = useMemo(
+    () => columnOrder.map((k) => columnsByKey[k]).filter(Boolean),
+    [columnOrder, columnsByKey],
+  );
+
+  function moveColumn(key: string, overKey: string) {
+    if (key === overKey) return;
+    setColumnOrder((prev) => {
+      const next = [...prev];
+      const from = next.indexOf(key);
+      const to = next.indexOf(overKey);
+      if (from === -1 || to === -1) return prev;
+      next.splice(from, 1);
+      next.splice(to, 0, key);
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function resetColumnOrder() {
+    const order = defaultColumns.map((c) => c.key);
+    setColumnOrder(order);
+    window.localStorage.removeItem(storageKey);
+  }
 
   const [leads, setLeads] = useState<AnyLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -244,6 +310,14 @@ function MasterSheetTableInner({
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={resetColumnOrder}
+          className="rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
+          title="Restore the default column order"
+        >
+          Reset columns
+        </button>
         <span className="ml-auto text-sm text-slate-500">
           {loading ? "Loading…" : `${filtered.length} of ${leads.length} leads`}
         </span>
@@ -260,7 +334,6 @@ function MasterSheetTableInner({
           <thead className="sticky top-0 z-20">
             <tr>
               <th
-                rowSpan={2}
                 onClick={() => toggleSort("campaign")}
                 className="sticky left-0 z-30 min-w-[90px] cursor-pointer select-none border-b border-r border-slate-300 bg-slate-100 px-2 py-1 text-left font-semibold text-slate-700 hover:bg-slate-200"
               >
@@ -268,37 +341,36 @@ function MasterSheetTableInner({
                 <SortIndicator active={sortKey === "campaign"} dir={sortDir} />
               </th>
               <th
-                rowSpan={2}
                 onClick={() => toggleSort("pipeline_stage")}
                 className="sticky left-[90px] z-30 min-w-[160px] cursor-pointer select-none border-b border-r border-slate-300 bg-slate-100 px-2 py-1 text-left font-semibold text-slate-700 hover:bg-slate-200"
               >
                 Pipeline Stage
                 <SortIndicator active={sortKey === "pipeline_stage"} dir={sortDir} />
               </th>
-              {groups.map((group) => (
+              {columns.map((col) => (
                 <th
-                  key={group.label}
-                  colSpan={group.columns.length}
-                  className="border-b border-r border-slate-300 bg-slate-200 px-2 py-1 text-center font-semibold text-slate-700"
+                  key={col.key}
+                  draggable
+                  onDragStart={() => setDragKey(col.key)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragKey) moveColumn(dragKey, col.key);
+                    setDragKey(null);
+                  }}
+                  onDragEnd={() => setDragKey(null)}
+                  onClick={() => toggleSort(col.key)}
+                  style={{ minWidth: col.width }}
+                  className={`cursor-grab select-none border-b border-r border-slate-200 bg-slate-100 px-2 py-1 text-left font-medium text-slate-600 whitespace-nowrap hover:bg-slate-200 active:cursor-grabbing ${
+                    dragKey === col.key ? "opacity-40" : ""
+                  }`}
+                  title="Drag to reorder, click to sort"
                 >
-                  {group.label}
+                  <span className="mr-1 text-slate-300">⠿</span>
+                  {col.header}
+                  <SortIndicator active={sortKey === col.key} dir={sortDir} />
                 </th>
               ))}
-            </tr>
-            <tr>
-              {groups.flatMap((group) =>
-                group.columns.map((col) => (
-                  <th
-                    key={String(col.key)}
-                    style={{ minWidth: col.width }}
-                    onClick={() => toggleSort(col.key)}
-                    className="cursor-pointer select-none border-b border-r border-slate-200 bg-slate-100 px-2 py-1 text-left font-medium text-slate-600 whitespace-nowrap hover:bg-slate-200"
-                  >
-                    {col.header}
-                    <SortIndicator active={sortKey === col.key} dir={sortDir} />
-                  </th>
-                )),
-              )}
             </tr>
           </thead>
           <tbody>
@@ -334,8 +406,7 @@ function MasterSheetTableInner({
                     ))}
                   </select>
                 </td>
-                {groups.flatMap((group) =>
-                  group.columns.map((col) => {
+                {columns.map((col) => {
                     const value = (lead as unknown as Record<string, unknown>)[
                       col.key
                     ];
@@ -420,14 +491,13 @@ function MasterSheetTableInner({
                         {formatCell(col.kind, value)}
                       </td>
                     );
-                  }),
-                )}
+                  })}
               </tr>
             ))}
             {!loading && filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={2 + groups.flatMap((g) => g.columns).length}
+                  colSpan={2 + columns.length}
                   className="px-4 py-8 text-center text-slate-500"
                 >
                   No leads match the current filters.

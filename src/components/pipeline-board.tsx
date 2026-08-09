@@ -5,9 +5,10 @@ import { createClient } from "@/lib/supabase/client";
 import type { AnyLead, DatasetId, PipelineStage } from "@/lib/types";
 import { DATASETS, PIPELINE_STAGES, PIPELINE_STAGE_COLORS } from "@/lib/types";
 import { useDataset } from "@/lib/dataset-context";
-import { getLeadDisplay } from "@/lib/lead-adapter";
+import { getLeadDisplay, isDnc } from "@/lib/lead-adapter";
 import { formatMoney, formatNumber, telHref, formatPhone } from "@/lib/format";
 import StatTile from "@/components/stat-tile";
+import CircleStat from "@/components/circle-stat";
 
 export default function PipelineBoard() {
   const { dataset } = useDataset();
@@ -110,6 +111,20 @@ function PipelineBoardInner({
     };
   }, [filtered, byStage, dataset]);
 
+  const stageBreakdown = useMemo(() => {
+    const total = filtered.length || 1;
+    return PIPELINE_STAGES.map((stage) => {
+      const count = (byStage.get(stage) ?? []).length;
+      return { stage, count, percent: (count / total) * 100 };
+    });
+  }, [filtered, byStage]);
+
+  const dncBreakdown = useMemo(() => {
+    const total = filtered.length || 1;
+    const count = filtered.filter((l) => isDnc(l, dataset)).length;
+    return { count, percent: (count / total) * 100 };
+  }, [filtered, dataset]);
+
   async function updatePipelineStage(id: string, stage: PipelineStage) {
     setLeads((prev) =>
       prev.map((l) => (l.id === id ? { ...l, pipeline_stage: stage } : l)),
@@ -176,6 +191,30 @@ function PipelineBoardInner({
           value={kpis.winRate === null ? "—" : `${kpis.winRate.toFixed(0)}%`}
           sublabel="accepted vs. rejected"
         />
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="mb-3 text-sm font-semibold text-slate-800">
+          Pipeline Mix — % of {formatNumber(filtered.length)} leads
+        </div>
+        <div className="flex items-start gap-5 overflow-x-auto pb-1">
+          <CircleStat
+            percent={dncBreakdown.percent}
+            color="#dc2626"
+            label="DNC"
+            sublabel={`${formatNumber(dncBreakdown.count)} leads`}
+          />
+          <div className="mt-8 h-16 w-px shrink-0 bg-slate-200" aria-hidden />
+          {stageBreakdown.map(({ stage, count, percent }) => (
+            <CircleStat
+              key={stage}
+              percent={percent}
+              color={PIPELINE_STAGE_COLORS[stage]}
+              label={stage}
+              sublabel={`${formatNumber(count)} leads`}
+            />
+          ))}
+        </div>
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-4">

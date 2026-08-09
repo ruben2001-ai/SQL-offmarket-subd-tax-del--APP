@@ -33,3 +33,16 @@ export function getLeadDisplay(lead: AnyLead, dataset: DatasetId): LeadDisplay {
     address: (row.parcel_address as string | null) ?? null,
   };
 }
+
+// DNC representation also differs per table: subdivide tracks federal (`dnc`)
+// and state (`state_dnc`) scrub results as separate Yes/No flags; tax
+// delinquent collapses both into one `dnc_status` (Clear / DNC / Litigator /
+// No Data). Either way, this returns whether the lead is off-limits to text.
+export function isDnc(lead: AnyLead, dataset: DatasetId): boolean {
+  const row = lead as unknown as Record<string, unknown>;
+  if (dataset === "tax_delinquent") {
+    const status = row.dnc_status as string | null;
+    return status === "DNC" || status === "Litigator";
+  }
+  return row.dnc === "Yes" || row.state_dnc === "Yes";
+}
