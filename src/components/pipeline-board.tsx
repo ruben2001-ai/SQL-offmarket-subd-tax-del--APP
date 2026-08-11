@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { AnyLead, DatasetId, PipelineStage } from "@/lib/types";
 import { DATASETS, PIPELINE_STAGES, PIPELINE_STAGE_COLORS } from "@/lib/types";
 import { useDataset } from "@/lib/dataset-context";
-import { getLeadDisplay, isDnc } from "@/lib/lead-adapter";
+import { getLeadDisplay, wasOutreached, didRespond } from "@/lib/lead-adapter";
 import { formatMoney, formatNumber, telHref, formatPhone } from "@/lib/format";
 import StatTile from "@/components/stat-tile";
 import CircleStat from "@/components/circle-stat";
@@ -99,6 +99,11 @@ function PipelineBoardInner({
     const decided = accepted.length + rejected.length;
     const winRate = decided > 0 ? (accepted.length / decided) * 100 : null;
 
+    const outreachedCount = filtered.filter(wasOutreached).length;
+    const respondedCount = filtered.filter(didRespond).length;
+    const responseRate =
+      outreachedCount > 0 ? (respondedCount / outreachedCount) * 100 : null;
+
     return {
       totalLeads,
       totalAcreage,
@@ -108,6 +113,9 @@ function PipelineBoardInner({
       acceptedCount: accepted.length,
       acceptedValue,
       winRate,
+      outreachedCount,
+      respondedCount,
+      responseRate,
     };
   }, [filtered, byStage, dataset]);
 
@@ -118,12 +126,6 @@ function PipelineBoardInner({
       return { stage, count, percent: (count / total) * 100 };
     });
   }, [filtered, byStage]);
-
-  const dncBreakdown = useMemo(() => {
-    const total = filtered.length || 1;
-    const count = filtered.filter((l) => isDnc(l, dataset)).length;
-    return { count, percent: (count / total) * 100 };
-  }, [filtered, dataset]);
 
   async function updatePipelineStage(id: string, stage: PipelineStage) {
     setLeads((prev) =>
@@ -165,7 +167,12 @@ function PipelineBoardInner({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+        <StatTile
+          label="Response rate"
+          value={kpis.responseRate === null ? "—" : `${kpis.responseRate.toFixed(0)}%`}
+          sublabel={`${formatNumber(kpis.respondedCount)} of ${formatNumber(kpis.outreachedCount)} outreached`}
+        />
         <StatTile label="Total leads" value={formatNumber(kpis.totalLeads)} />
         <StatTile
           label="Total acreage"
@@ -198,13 +205,6 @@ function PipelineBoardInner({
           Pipeline Mix — % of {formatNumber(filtered.length)} leads
         </div>
         <div className="flex items-start gap-5 overflow-x-auto pb-1">
-          <CircleStat
-            percent={dncBreakdown.percent}
-            color="#dc2626"
-            label="DNC"
-            sublabel={`${formatNumber(dncBreakdown.count)} leads`}
-          />
-          <div className="mt-8 h-16 w-px shrink-0 bg-slate-200" aria-hidden />
           {stageBreakdown.map(({ stage, count, percent }) => (
             <CircleStat
               key={stage}

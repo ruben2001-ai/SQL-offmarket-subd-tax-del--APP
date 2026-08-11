@@ -7,9 +7,10 @@
   /* Pipeline stage categorical palette — validated adjacent-pair order
      (blue, orange, aqua, yellow, magenta, green, violet, red). Always
      paired with the stage's text label; color is never the only cue. */
+  --stage-dnc: #dc2626;
   --stage-leads: #2a78d6;
-  --stage-underwritten: #eb6834;
   --stage-outreached: #1baf7a;
+  --stage-underwriting: #eb6834;
   --stage-offered: #eda100;
   --stage-followup: #e87ba4;
   --stage-accepted: #008300;
@@ -29,9 +30,10 @@
     --background: #0a0a0a;
     --foreground: #ededed;
 
+    --stage-dnc: #ef4444;
     --stage-leads: #3987e5;
-    --stage-underwritten: #d95926;
     --stage-outreached: #199e70;
+    --stage-underwriting: #d95926;
     --stage-offered: #c98500;
     --stage-followup: #d55181;
     --stage-accepted: #008300;

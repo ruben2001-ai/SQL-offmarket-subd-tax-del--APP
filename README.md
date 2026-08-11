@@ -41,7 +41,7 @@ one; Supabase Auth handles the rest.
 ## Data model
 
 Two independent tables in the same Supabase project, both with a
-`pipeline_stage` column (`Leads → Underwritten → Outreached → Offered →
+`pipeline_stage` column (`DNC → Leads → Outreached → Underwriting → Offered →
 Follow-up → Accepted / Rejected / Long-term Follow-up`) and RLS restricted to
 `authenticated` read/write:
 

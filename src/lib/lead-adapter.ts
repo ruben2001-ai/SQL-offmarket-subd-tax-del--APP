@@ -34,15 +34,18 @@ export function getLeadDisplay(lead: AnyLead, dataset: DatasetId): LeadDisplay {
   };
 }
 
-// DNC representation also differs per table: subdivide tracks federal (`dnc`)
-// and state (`state_dnc`) scrub results as separate Yes/No flags; tax
-// delinquent collapses both into one `dnc_status` (Clear / DNC / Litigator /
-// No Data). Either way, this returns whether the lead is off-limits to text.
-export function isDnc(lead: AnyLead, dataset: DatasetId): boolean {
+// A lead counts as "outreached" once a message has actually gone out —
+// either `quo_message_sent` holds the sent text, or `outreach_status` has
+// moved past the untouched "Not Contacted" default. Field names match across
+// both tables, so no per-dataset branching is needed.
+export function wasOutreached(lead: AnyLead): boolean {
   const row = lead as unknown as Record<string, unknown>;
-  if (dataset === "tax_delinquent") {
-    const status = row.dnc_status as string | null;
-    return status === "DNC" || status === "Litigator";
-  }
-  return row.dnc === "Yes" || row.state_dnc === "Yes";
+  const status = row.outreach_status as string | null;
+  return Boolean(row.quo_message_sent) || Boolean(status && status !== "Not Contacted");
+}
+
+// `response_date` is set whenever a reply was logged, regardless of dataset.
+export function didRespond(lead: AnyLead): boolean {
+  const row = lead as unknown as Record<string, unknown>;
+  return Boolean(row.response_date);
 }

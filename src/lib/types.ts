@@ -195,9 +195,10 @@ export type TaxDelinquentLead = {
 export type AnyLead = Lead | TaxDelinquentLead;
 
 export const PIPELINE_STAGES = [
+  "DNC",
   "Leads",
-  "Underwritten",
   "Outreached",
+  "Underwriting",
   "Offered",
   "Follow-up",
   "Accepted",
@@ -207,14 +208,16 @@ export const PIPELINE_STAGES = [
 
 export type PipelineStage = (typeof PIPELINE_STAGES)[number];
 
-// Validated 8-slot categorical palette (dataviz skill default order: blue, orange,
-// aqua, yellow, magenta, green, violet, red — resolved via CSS vars in globals.css
-// so light/dark both stay within the validated adjacent-pair CVD gates). Color is
-// always paired with the stage's text label, never used alone to carry meaning.
+// Validated 9-slot categorical palette (dataviz skill default order extended
+// with a red DNC slot up front — resolved via CSS vars in globals.css so
+// light/dark both stay within the validated adjacent-pair CVD gates). Color
+// is always paired with the stage's text label, never used alone to carry
+// meaning.
 export const PIPELINE_STAGE_COLORS: Record<PipelineStage, string> = {
+  DNC: "var(--stage-dnc)",
   Leads: "var(--stage-leads)",
-  Underwritten: "var(--stage-underwritten)",
   Outreached: "var(--stage-outreached)",
+  Underwriting: "var(--stage-underwriting)",
   Offered: "var(--stage-offered)",
   "Follow-up": "var(--stage-followup)",
   Accepted: "var(--stage-accepted)",
