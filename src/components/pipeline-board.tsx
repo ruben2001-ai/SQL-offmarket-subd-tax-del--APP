@@ -350,16 +350,6 @@ function PipelineBoardInner({
           Pipeline Mix — % of {formatNumber(filtered.length)} leads
         </div>
         <div className="flex items-start gap-5 overflow-x-auto pb-1">
-          {reachMethodStats.map((stat) => (
-            <CircleStat
-              key={stat.key}
-              percent={stat.percentOfTotal}
-              color={stat.color}
-              label={stat.label}
-              sublabel={`${formatNumber(stat.count)} leads`}
-            />
-          ))}
-          <div className="mt-8 h-16 w-px shrink-0 bg-slate-200" aria-hidden />
           {funnel.map((step) => (
             <CircleStat
               key={step.key}
@@ -372,6 +362,16 @@ function PipelineBoardInner({
                   ? undefined
                   : `${Math.round(step.percentOfPrevious)}% of ${step.previousLabel}`
               }
+            />
+          ))}
+          <div className="mt-8 h-16 w-px shrink-0 bg-slate-200" aria-hidden />
+          {reachMethodStats.map((stat) => (
+            <CircleStat
+              key={stat.key}
+              percent={stat.percentOfTotal}
+              color={stat.color}
+              label={stat.label}
+              sublabel={`${formatNumber(stat.count)} leads`}
             />
           ))}
         </div>
