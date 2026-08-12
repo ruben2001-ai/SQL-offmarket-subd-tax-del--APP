@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { AnyLead, DatasetId, PipelineStage } from "@/lib/types";
 import { DATASETS, PIPELINE_STAGES, PIPELINE_STAGE_COLORS } from "@/lib/types";
 import { useDataset } from "@/lib/dataset-context";
-import { getLeadDisplay, wasOutreached, didRespond } from "@/lib/lead-adapter";
+import {
+  getLeadDisplay,
+  getLatestMessage,
+  getFunnelMilestones,
+  isDncStatusUnclear,
+  wasOutreached,
+  didRespond,
+} from "@/lib/lead-adapter";
 import { formatMoney, formatNumber, telHref, formatPhone } from "@/lib/format";
 import StatTile from "@/components/stat-tile";
 import CircleStat from "@/components/circle-stat";
@@ -119,13 +126,133 @@ function PipelineBoardInner({
     };
   }, [filtered, byStage, dataset]);
 
-  const stageBreakdown = useMemo(() => {
-    const total = filtered.length || 1;
-    return PIPELINE_STAGES.map((stage) => {
-      const count = (byStage.get(stage) ?? []).length;
-      return { stage, count, percent: (count / total) * 100 };
-    });
-  }, [filtered, byStage]);
+  // The pipeline mix funnel is a derived, cumulative view (outreached ->
+  // responded -> qualified -> underwriting -> offered -> accepted/rejected),
+  // independent of the discrete pipeline_stage kanban columns below — see
+  // getFunnelMilestones for how each bucket is inferred. DNC is shown
+  // separately on two axes: the real `DNC` pipeline_stage (a manual
+  // placement) and DNC screening status (leads whose dnc/state_dnc columns
+  // aren't confirmed clear yet, regardless of what stage they're sitting in).
+  const funnel = useMemo(() => {
+    const total = filtered.length;
+    const pct = (n: number, d: number) => (d > 0 ? (n / d) * 100 : 0);
+    const milestones = filtered.map(getFunnelMilestones);
+    const count = (pick: (m: (typeof milestones)[number]) => boolean) =>
+      milestones.filter(pick).length;
+
+    const dncStageCount = (byStage.get("DNC") ?? []).length;
+    const dncUnclearCount = filtered.filter((l) => isDncStatusUnclear(l, dataset)).length;
+    const outreachedCount = count((m) => m.outreached);
+    const respondedCount = count((m) => m.responded);
+    const qualifiedCount = count((m) => m.qualified);
+    const notQualifiedCount = count((m) => m.notQualified);
+    const underwritingCount = count((m) => m.underwriting);
+    const offeredCount = count((m) => m.offered);
+    const acceptedCount = count((m) => m.accepted);
+    const rejectedCount = count((m) => m.rejected);
+
+    return [
+      {
+        key: "dnc",
+        label: "DNC",
+        color: "var(--stage-dnc)",
+        count: dncStageCount,
+        percentOfTotal: pct(dncStageCount, total),
+        percentOfPrevious: null as number | null,
+        previousLabel: null as string | null,
+      },
+      {
+        key: "dncUnclear",
+        label: "DNC Unclear",
+        color: "#94a3b8",
+        count: dncUnclearCount,
+        percentOfTotal: pct(dncUnclearCount, total),
+        percentOfPrevious: null,
+        previousLabel: null,
+      },
+      {
+        key: "potential",
+        label: "Potential Leads",
+        color: "var(--stage-leads)",
+        count: total,
+        percentOfTotal: 100,
+        percentOfPrevious: null,
+        previousLabel: null,
+      },
+      {
+        key: "outreached",
+        label: "Outreached",
+        color: "var(--stage-outreached)",
+        count: outreachedCount,
+        percentOfTotal: pct(outreachedCount, total),
+        percentOfPrevious: pct(outreachedCount, total),
+        previousLabel: "Potential Leads",
+      },
+      {
+        key: "responded",
+        label: "Responded",
+        color: "var(--stage-followup)",
+        count: respondedCount,
+        percentOfTotal: pct(respondedCount, total),
+        percentOfPrevious: pct(respondedCount, outreachedCount),
+        previousLabel: "Outreached",
+      },
+      {
+        key: "qualified",
+        label: "Qualified",
+        color: "var(--stage-accepted)",
+        count: qualifiedCount,
+        percentOfTotal: pct(qualifiedCount, total),
+        percentOfPrevious: pct(qualifiedCount, respondedCount),
+        previousLabel: "Responded",
+      },
+      {
+        key: "notQualified",
+        label: "Not Qualified",
+        color: "var(--stage-longterm)",
+        count: notQualifiedCount,
+        percentOfTotal: pct(notQualifiedCount, total),
+        percentOfPrevious: pct(notQualifiedCount, respondedCount),
+        previousLabel: "Responded",
+      },
+      {
+        key: "underwriting",
+        label: "Underwriting",
+        color: "var(--stage-underwriting)",
+        count: underwritingCount,
+        percentOfTotal: pct(underwritingCount, total),
+        percentOfPrevious: pct(underwritingCount, qualifiedCount),
+        previousLabel: "Qualified",
+      },
+      {
+        key: "offered",
+        label: "Offered",
+        color: "var(--stage-offered)",
+        count: offeredCount,
+        percentOfTotal: pct(offeredCount, total),
+        percentOfPrevious: pct(offeredCount, underwritingCount),
+        previousLabel: "Underwriting",
+      },
+      {
+        key: "accepted",
+        label: "Accepted",
+        color: "var(--stage-accepted)",
+        count: acceptedCount,
+        percentOfTotal: pct(acceptedCount, total),
+        percentOfPrevious: pct(acceptedCount, offeredCount),
+        previousLabel: "Offered",
+      },
+      {
+        key: "rejected",
+        label: "Rejected",
+        color: "var(--stage-rejected)",
+        count: rejectedCount,
+        percentOfTotal: pct(rejectedCount, total),
+        percentOfPrevious: pct(rejectedCount, offeredCount),
+        previousLabel: "Offered",
+      },
+    ];
+  }, [filtered, byStage, dataset]);
 
   async function updatePipelineStage(id: string, stage: PipelineStage) {
     setLeads((prev) =>
@@ -205,14 +332,24 @@ function PipelineBoardInner({
           Pipeline Mix — % of {formatNumber(filtered.length)} leads
         </div>
         <div className="flex items-start gap-5 overflow-x-auto pb-1">
-          {stageBreakdown.map(({ stage, count, percent }) => (
-            <CircleStat
-              key={stage}
-              percent={percent}
-              color={PIPELINE_STAGE_COLORS[stage]}
-              label={stage}
-              sublabel={`${formatNumber(count)} leads`}
-            />
+          {funnel.map((step, i) => (
+            <Fragment key={step.key}>
+              {/* Separate DNC / DNC Unclear (not part of the funnel chain) from the rest with a divider */}
+              {i === 2 && (
+                <div className="mt-8 h-16 w-px shrink-0 bg-slate-200" aria-hidden />
+              )}
+              <CircleStat
+                percent={step.percentOfTotal}
+                color={step.color}
+                label={step.label}
+                sublabel={`${formatNumber(step.count)} leads`}
+                secondary={
+                  step.percentOfPrevious === null || step.previousLabel === null
+                    ? undefined
+                    : `${Math.round(step.percentOfPrevious)}% of ${step.previousLabel}`
+                }
+              />
+            </Fragment>
           ))}
         </div>
       </div>
@@ -277,31 +414,54 @@ function LeadCard({
   dataset: DatasetId;
   onStageChange: (stage: PipelineStage) => void;
 }) {
-  const { ownerName, acreage, address } = getLeadDisplay(lead, dataset);
+  const { ownerName, acreage, address, value, valuePerAcre } = getLeadDisplay(lead, dataset);
+  const latestMessage = getLatestMessage(lead, dataset);
   const price = lead.counter_amount || lead.offer_amount
     ? lead.counter_amount || formatMoney(lead.offer_amount)
     : null;
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-2.5 shadow-sm">
+    <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
       <div className="flex items-start justify-between gap-2">
-        <span className="text-sm font-medium text-slate-900">{ownerName}</span>
+        <span className="text-[13px] font-medium leading-tight text-slate-900">
+          {ownerName}
+        </span>
         {lead.campaign && (
           <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
             {lead.campaign}
           </span>
         )}
       </div>
-      <div className="mt-1 text-xs text-slate-500">
+
+      <div className="mt-0.5 text-[11px] leading-tight text-slate-500">
         {acreage ? `${formatNumber(acreage)} ac` : null}
         {address ? ` · ${address}` : null}
       </div>
+
+      {(value || valuePerAcre) && (
+        <div className="mt-0.5 text-[11px] leading-tight text-slate-600">
+          {value ? formatMoney(value) : null}
+          {value && valuePerAcre ? " · " : null}
+          {valuePerAcre ? `${formatMoney(valuePerAcre)}/ac` : null}
+        </div>
+      )}
+
       {lead.apn && (
-        <div className="mt-0.5 text-[11px] text-slate-400">APN {lead.apn}</div>
+        <div className="mt-0.5 text-[10px] text-slate-400">APN {lead.apn}</div>
       )}
+
       {price && (
-        <div className="mt-1 text-xs font-medium text-slate-700">{price}</div>
+        <div className="mt-0.5 text-[11px] font-medium text-slate-700">
+          Offer: {price}
+        </div>
       )}
+
+      {latestMessage && (
+        <div className="mt-1 line-clamp-2 rounded bg-slate-50 px-1.5 py-1 text-[10px] italic leading-snug text-slate-500">
+          &ldquo;{latestMessage}&rdquo;
+        </div>
+      )}
+
       <div className="mt-1 flex items-center gap-2">
         {lead.active_phone || lead.phone_1 ? (
           <a
@@ -322,10 +482,11 @@ function LeadCard({
           </a>
         )}
       </div>
+
       <select
         value={lead.pipeline_stage ?? "Leads"}
         onChange={(e) => onStageChange(e.target.value as PipelineStage)}
-        className="mt-2 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[11px] text-slate-600"
+        className="mt-1.5 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[11px] text-slate-600"
       >
         {PIPELINE_STAGES.map((s) => (
           <option key={s} value={s}>

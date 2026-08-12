@@ -3,12 +3,14 @@ export default function CircleStat({
   color,
   label,
   sublabel,
+  secondary,
   size = 84,
 }: {
   percent: number;
   color: string;
   label: string;
   sublabel?: string;
+  secondary?: string;
   size?: number;
 }) {
   const strokeWidth = 8;
@@ -49,6 +51,7 @@ export default function CircleStat({
       <div className="text-center leading-tight">
         <div className="text-[11px] font-medium text-slate-600">{label}</div>
         {sublabel && <div className="text-[10px] text-slate-400">{sublabel}</div>}
+        {secondary && <div className="text-[10px] text-slate-400">{secondary}</div>}
       </div>
     </div>
   );
