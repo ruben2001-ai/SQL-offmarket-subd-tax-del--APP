@@ -72,20 +72,20 @@ export function didRespond(lead: AnyLead): boolean {
   return Boolean(row.response_date);
 }
 
-// DNC screening status is separate from the real `DNC` pipeline_stage — a
-// lead can be un-screened or flagged in the DNC/state_dnc columns without
-// anyone having manually moved it into the DNC stage yet. Subdivide tracks
-// federal (`dnc`) and state (`state_dnc`) scrub results as separate Yes/No
-// flags; tax delinquent collapses both into one `dnc_status` (Clear / DNC /
-// Litigator / No Data). This returns true unless both show an explicit,
-// confirmed "clear" result — i.e. it also catches leads nobody has screened
-// yet, not just ones already flagged.
-export function isDncStatusUnclear(lead: AnyLead, dataset: DatasetId): boolean {
+// `reach_method` is only ever assigned Text when a lead is DNC-clear, so it
+// doubles as the DNC signal — Manual/Email leads are the ones DNC (or
+// missing digital channels) ruled out of texting. Live values include
+// compound tags like "TEXT+SOCIAL"/"EMAIL+SOCIAL" (see
+// off-market-leads-builder), which fold into their base channel here.
+export type ReachMethodBucket = "Text" | "Email" | "Manual";
+
+export function getReachMethodBucket(lead: AnyLead): ReachMethodBucket | null {
   const row = lead as unknown as Record<string, unknown>;
-  if (dataset === "tax_delinquent") {
-    return (row.dnc_status as string | null) !== "Clear";
-  }
-  return !(row.dnc === "No" && row.state_dnc === "No");
+  const raw = (row.reach_method as string | null)?.trim().toUpperCase() ?? "";
+  if (raw.startsWith("TEXT")) return "Text";
+  if (raw.startsWith("EMAIL")) return "Email";
+  if (raw === "MANUAL") return "Manual";
+  return null;
 }
 
 // Derived, cumulative funnel position — independent of the discrete
@@ -107,6 +107,7 @@ export type FunnelMilestones = {
   offered: boolean;
   accepted: boolean;
   rejected: boolean;
+  longTermFollowUp: boolean;
 };
 
 const RESPONDED_STATUSES = new Set([
@@ -140,6 +141,7 @@ export function getFunnelMilestones(lead: AnyLead): FunnelMilestones {
     didRespond(lead) ||
     (status !== null && RESPONDED_STATUSES.has(status));
   const outreached = responded || wasOutreached(lead) || stage === "Outreached";
+  const longTermFollowUp = stage === "Long-term Follow-up";
 
   return {
     outreached,
@@ -150,5 +152,6 @@ export function getFunnelMilestones(lead: AnyLead): FunnelMilestones {
     offered,
     accepted,
     rejected,
+    longTermFollowUp,
   };
 }

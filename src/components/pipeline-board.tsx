@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { AnyLead, DatasetId, PipelineStage } from "@/lib/types";
 import { DATASETS, PIPELINE_STAGES, PIPELINE_STAGE_COLORS } from "@/lib/types";
@@ -9,10 +9,11 @@ import {
   getLeadDisplay,
   getLatestMessage,
   getFunnelMilestones,
-  isDncStatusUnclear,
+  getReachMethodBucket,
   wasOutreached,
   didRespond,
 } from "@/lib/lead-adapter";
+import type { ReachMethodBucket } from "@/lib/lead-adapter";
 import { formatMoney, formatNumber, telHref, formatPhone } from "@/lib/format";
 import StatTile from "@/components/stat-tile";
 import CircleStat from "@/components/circle-stat";
@@ -126,13 +127,39 @@ function PipelineBoardInner({
     };
   }, [filtered, byStage, dataset]);
 
+  // Share of leads by reach channel (Text/Email/Manual) — Text is only ever
+  // assigned to DNC-clear leads, so this doubles as the DNC picture without
+  // a separate DNC stat. Independent shares of the same pool, not a funnel.
+  const reachMethodStats = useMemo(() => {
+    const total = filtered.length;
+    const pct = (n: number, d: number) => (d > 0 ? (n / d) * 100 : 0);
+    const counts: Record<ReachMethodBucket, number> = { Text: 0, Email: 0, Manual: 0 };
+    for (const lead of filtered) {
+      const bucket = getReachMethodBucket(lead);
+      if (bucket) counts[bucket] += 1;
+    }
+    const colors: Record<ReachMethodBucket, string> = {
+      Text: "var(--stage-outreached)",
+      Email: "var(--stage-offered)",
+      Manual: "var(--stage-dnc)",
+    };
+    return (["Text", "Email", "Manual"] as ReachMethodBucket[]).map((bucket) => ({
+      key: bucket,
+      label: bucket,
+      color: colors[bucket],
+      count: counts[bucket],
+      percentOfTotal: pct(counts[bucket], total),
+    }));
+  }, [filtered]);
+
   // The pipeline mix funnel is a derived, cumulative view (outreached ->
-  // responded -> qualified -> underwriting -> offered -> accepted/rejected),
-  // independent of the discrete pipeline_stage kanban columns below — see
-  // getFunnelMilestones for how each bucket is inferred. DNC is shown
-  // separately on two axes: the real `DNC` pipeline_stage (a manual
-  // placement) and DNC screening status (leads whose dnc/state_dnc columns
-  // aren't confirmed clear yet, regardless of what stage they're sitting in).
+  // responded -> qualified -> underwriting -> offered ->
+  // accepted/rejected/long-term follow-up), independent of the discrete
+  // pipeline_stage kanban columns below — see getFunnelMilestones for how
+  // each bucket is inferred. Potential Leads is the complement of Outreached
+  // (leads still left to contact), not the total pool, so it isn't a useful
+  // "previous stage" denominator — Outreached's secondary percentage is
+  // dropped rather than compared against it.
   const funnel = useMemo(() => {
     const total = filtered.length;
     const pct = (n: number, d: number) => (d > 0 ? (n / d) * 100 : 0);
@@ -140,9 +167,8 @@ function PipelineBoardInner({
     const count = (pick: (m: (typeof milestones)[number]) => boolean) =>
       milestones.filter(pick).length;
 
-    const dncStageCount = (byStage.get("DNC") ?? []).length;
-    const dncUnclearCount = filtered.filter((l) => isDncStatusUnclear(l, dataset)).length;
     const outreachedCount = count((m) => m.outreached);
+    const potentialLeadsCount = total - outreachedCount;
     const respondedCount = count((m) => m.responded);
     const qualifiedCount = count((m) => m.qualified);
     const notQualifiedCount = count((m) => m.notQualified);
@@ -150,34 +176,17 @@ function PipelineBoardInner({
     const offeredCount = count((m) => m.offered);
     const acceptedCount = count((m) => m.accepted);
     const rejectedCount = count((m) => m.rejected);
+    const longTermFollowUpCount = count((m) => m.longTermFollowUp);
 
     return [
-      {
-        key: "dnc",
-        label: "DNC",
-        color: "var(--stage-dnc)",
-        count: dncStageCount,
-        percentOfTotal: pct(dncStageCount, total),
-        percentOfPrevious: null as number | null,
-        previousLabel: null as string | null,
-      },
-      {
-        key: "dncUnclear",
-        label: "DNC Unclear",
-        color: "#94a3b8",
-        count: dncUnclearCount,
-        percentOfTotal: pct(dncUnclearCount, total),
-        percentOfPrevious: null,
-        previousLabel: null,
-      },
       {
         key: "potential",
         label: "Potential Leads",
         color: "var(--stage-leads)",
-        count: total,
-        percentOfTotal: 100,
-        percentOfPrevious: null,
-        previousLabel: null,
+        count: potentialLeadsCount,
+        percentOfTotal: pct(potentialLeadsCount, total),
+        percentOfPrevious: null as number | null,
+        previousLabel: null as string | null,
       },
       {
         key: "outreached",
@@ -185,8 +194,8 @@ function PipelineBoardInner({
         color: "var(--stage-outreached)",
         count: outreachedCount,
         percentOfTotal: pct(outreachedCount, total),
-        percentOfPrevious: pct(outreachedCount, total),
-        previousLabel: "Potential Leads",
+        percentOfPrevious: null,
+        previousLabel: null,
       },
       {
         key: "responded",
@@ -209,7 +218,7 @@ function PipelineBoardInner({
       {
         key: "notQualified",
         label: "Not Qualified",
-        color: "var(--stage-longterm)",
+        color: "var(--stage-dnc)",
         count: notQualifiedCount,
         percentOfTotal: pct(notQualifiedCount, total),
         percentOfPrevious: pct(notQualifiedCount, respondedCount),
@@ -251,8 +260,17 @@ function PipelineBoardInner({
         percentOfPrevious: pct(rejectedCount, offeredCount),
         previousLabel: "Offered",
       },
+      {
+        key: "longTermFollowUp",
+        label: "Long-term Follow-up",
+        color: "var(--stage-longterm)",
+        count: longTermFollowUpCount,
+        percentOfTotal: pct(longTermFollowUpCount, total),
+        percentOfPrevious: pct(longTermFollowUpCount, offeredCount),
+        previousLabel: "Offered",
+      },
     ];
-  }, [filtered, byStage, dataset]);
+  }, [filtered]);
 
   async function updatePipelineStage(id: string, stage: PipelineStage) {
     setLeads((prev) =>
@@ -332,24 +350,29 @@ function PipelineBoardInner({
           Pipeline Mix — % of {formatNumber(filtered.length)} leads
         </div>
         <div className="flex items-start gap-5 overflow-x-auto pb-1">
-          {funnel.map((step, i) => (
-            <Fragment key={step.key}>
-              {/* Separate DNC / DNC Unclear (not part of the funnel chain) from the rest with a divider */}
-              {i === 2 && (
-                <div className="mt-8 h-16 w-px shrink-0 bg-slate-200" aria-hidden />
-              )}
-              <CircleStat
-                percent={step.percentOfTotal}
-                color={step.color}
-                label={step.label}
-                sublabel={`${formatNumber(step.count)} leads`}
-                secondary={
-                  step.percentOfPrevious === null || step.previousLabel === null
-                    ? undefined
-                    : `${Math.round(step.percentOfPrevious)}% of ${step.previousLabel}`
-                }
-              />
-            </Fragment>
+          {reachMethodStats.map((stat) => (
+            <CircleStat
+              key={stat.key}
+              percent={stat.percentOfTotal}
+              color={stat.color}
+              label={stat.label}
+              sublabel={`${formatNumber(stat.count)} leads`}
+            />
+          ))}
+          <div className="mt-8 h-16 w-px shrink-0 bg-slate-200" aria-hidden />
+          {funnel.map((step) => (
+            <CircleStat
+              key={step.key}
+              percent={step.percentOfTotal}
+              color={step.color}
+              label={step.label}
+              sublabel={`${formatNumber(step.count)} leads`}
+              secondary={
+                step.percentOfPrevious === null || step.previousLabel === null
+                  ? undefined
+                  : `${Math.round(step.percentOfPrevious)}% of ${step.previousLabel}`
+              }
+            />
           ))}
         </div>
       </div>
