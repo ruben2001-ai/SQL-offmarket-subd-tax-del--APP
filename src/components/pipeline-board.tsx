@@ -174,7 +174,6 @@ function PipelineBoardInner({
     const notQualifiedCount = count((m) => m.notQualified);
     const underwritingCount = count((m) => m.underwriting);
     const offeredCount = count((m) => m.offered);
-    const acceptedCount = count((m) => m.accepted);
     const rejectedCount = count((m) => m.rejected);
     const longTermFollowUpCount = count((m) => m.longTermFollowUp);
 
@@ -241,15 +240,6 @@ function PipelineBoardInner({
         percentOfTotal: pct(offeredCount, total),
         percentOfPrevious: pct(offeredCount, underwritingCount),
         previousLabel: "Underwriting",
-      },
-      {
-        key: "accepted",
-        label: "Accepted",
-        color: "var(--stage-accepted)",
-        count: acceptedCount,
-        percentOfTotal: pct(acceptedCount, total),
-        percentOfPrevious: pct(acceptedCount, offeredCount),
-        previousLabel: "Offered",
       },
       {
         key: "rejected",
@@ -350,6 +340,16 @@ function PipelineBoardInner({
           Pipeline Mix — % of {formatNumber(filtered.length)} leads
         </div>
         <div className="flex items-start gap-5 overflow-x-auto pb-1">
+          {reachMethodStats.map((stat) => (
+            <CircleStat
+              key={stat.key}
+              percent={stat.percentOfTotal}
+              color={stat.color}
+              label={stat.label}
+              sublabel={`${formatNumber(stat.count)} leads`}
+            />
+          ))}
+          <div className="mt-8 h-16 w-px shrink-0 bg-slate-200" aria-hidden />
           {funnel.map((step) => (
             <CircleStat
               key={step.key}
@@ -362,16 +362,6 @@ function PipelineBoardInner({
                   ? undefined
                   : `${Math.round(step.percentOfPrevious)}% of ${step.previousLabel}`
               }
-            />
-          ))}
-          <div className="mt-8 h-16 w-px shrink-0 bg-slate-200" aria-hidden />
-          {reachMethodStats.map((stat) => (
-            <CircleStat
-              key={stat.key}
-              percent={stat.percentOfTotal}
-              color={stat.color}
-              label={stat.label}
-              sublabel={`${formatNumber(stat.count)} leads`}
             />
           ))}
         </div>
