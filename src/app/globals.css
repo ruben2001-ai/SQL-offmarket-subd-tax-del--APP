@@ -6,10 +6,17 @@
 
   /* Pipeline stage categorical palette — validated adjacent-pair order
      (blue, orange, aqua, yellow, magenta, green, violet, red). Always
-     paired with the stage's text label; color is never the only cue. */
+     paired with the stage's text label; color is never the only cue.
+     potential/responded/qualified/not-qualified are additive slots for the
+     expanded stage list — chosen to differ from their immediate neighbors
+     in PIPELINE_STAGES order, not independently CVD-revalidated. */
   --stage-dnc: #dc2626;
   --stage-leads: #2a78d6;
+  --stage-potential: #7c5cbf;
   --stage-outreached: #1baf7a;
+  --stage-responded: #0e8aa3;
+  --stage-qualified: #b8952e;
+  --stage-not-qualified: #c0355c;
   --stage-underwriting: #eb6834;
   --stage-offered: #eda100;
   --stage-followup: #e87ba4;
@@ -32,7 +39,11 @@
 
     --stage-dnc: #ef4444;
     --stage-leads: #3987e5;
+    --stage-potential: #9c85e0;
     --stage-outreached: #199e70;
+    --stage-responded: #22b8d8;
+    --stage-qualified: #d4af52;
+    --stage-not-qualified: #e0628a;
     --stage-underwriting: #d95926;
     --stage-offered: #c98500;
     --stage-followup: #d55181;

@@ -88,16 +88,18 @@ export function getReachMethodBucket(lead: AnyLead): ReachMethodBucket | null {
   return null;
 }
 
-// Derived, cumulative funnel position — independent of the discrete
-// `pipeline_stage` kanban column (and of the real `DNC` stage, which is a
-// manual compliance placement, not a funnel step). Each flag implies every
-// flag before it in the chain (outreached -> responded -> qualified ->
-// underwriting -> offered -> accepted/rejected), inferred from the
-// strongest available signal (pipeline_stage, outreach_status,
-// response_date), so a lead that jumped straight to "Offered" still counts
-// in every earlier bucket even if the intermediate status fields were never
-// filled in by hand. Reuses `wasOutreached`/`didRespond` so this stays
-// consistent with the Response rate KPI.
+// Derived, cumulative funnel position. `pipeline_stage` now includes
+// Responded/Qualified/Not Qualified/Underwriting/Offered/Accepted/Rejected
+// as real, manually-selectable values (plus the legacy DNC/Leads/Follow-up
+// values, which aren't funnel steps), so a literal placement into one of
+// those is authoritative. Where a lead hasn't been manually moved that far,
+// this falls back to inferring from outreach_status/response_date, and each
+// flag still implies every flag before it in the chain (outreached ->
+// responded -> qualified -> underwriting -> offered -> accepted/rejected),
+// so a lead placed straight at "Offered" still counts in every earlier
+// bucket even if the intermediate stage/status was never set by hand.
+// Reuses `wasOutreached`/`didRespond` so this stays consistent with the
+// Response rate KPI.
 export type FunnelMilestones = {
   outreached: boolean;
   responded: boolean;
@@ -133,11 +135,13 @@ export function getFunnelMilestones(lead: AnyLead): FunnelMilestones {
     stage === "Follow-up" ||
     stage === "Long-term Follow-up";
   const underwriting = offered || stage === "Underwriting";
-  const qualified = underwriting || status === "Qualified - Call Booked";
-  const notQualified = !qualified && status === "Closed - No";
+  const qualified =
+    underwriting || stage === "Qualified" || status === "Qualified - Call Booked";
+  const notQualified = !qualified && (stage === "Not Qualified" || status === "Closed - No");
   const responded =
     qualified ||
     notQualified ||
+    stage === "Responded" ||
     didRespond(lead) ||
     (status !== null && RESPONDED_STATUSES.has(status));
   const outreached = responded || wasOutreached(lead) || stage === "Outreached";

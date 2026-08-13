@@ -17,10 +17,13 @@ source of truth for day-to-day outreach state after that.
   `public.tax_delinquent_leads`, full schema in `src/lib/types.ts`
   (`Lead` / `TaxDelinquentLead`). Both carry `pipeline_stage`, RLS-gated to
   `authenticated` users only.
-- `pipeline_stage` values (shared enum across both tables): `DNC → Leads →
-  Outreached → Underwriting → Offered → Follow-up → Accepted / Rejected /
-  Long-term Follow-up`. This is the field the Pipeline Overview board groups
-  by — keep it current as leads move through outreach.
+- `pipeline_stage` values (shared enum across both tables): `DNC / Leads /
+  Potential Leads → Outreached → Responded → Qualified / Not Qualified →
+  Underwriting → Offered → Follow-up → Accepted / Rejected / Long-term
+  Follow-up`. DNC/Leads/Follow-up are legacy values kept for existing rows;
+  new leads should move through Potential Leads → ... → Accepted/Rejected.
+  This is the field the Pipeline Overview board groups by — keep it current
+  as leads move through outreach.
 
 ## Working across two datasets
 
