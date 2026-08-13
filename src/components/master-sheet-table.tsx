@@ -242,7 +242,7 @@ function MasterSheetTableInner({
 
   function sortValue(lead: AnyLead, key: string): number | string | null {
     if (key === "pipeline_stage") {
-      const stage = (lead.pipeline_stage as PipelineStage) ?? "Leads";
+      const stage = (lead.pipeline_stage as PipelineStage) ?? "Potential Leads";
       return PIPELINE_STAGES.indexOf(stage);
     }
     const raw = (lead as unknown as Record<string, unknown>)[key];
@@ -384,7 +384,7 @@ function MasterSheetTableInner({
                 </td>
                 <td className="sticky left-[90px] z-10 border-b border-r border-slate-200 bg-inherit px-1 py-1">
                   <select
-                    value={lead.pipeline_stage ?? "Leads"}
+                    value={lead.pipeline_stage ?? "Potential Leads"}
                     onChange={(e) =>
                       updatePipelineStage(
                         lead.id,
@@ -394,7 +394,7 @@ function MasterSheetTableInner({
                     style={{
                       borderLeftColor:
                         PIPELINE_STAGE_COLORS[
-                          (lead.pipeline_stage as PipelineStage) ?? "Leads"
+                          (lead.pipeline_stage as PipelineStage) ?? "Potential Leads"
                         ],
                     }}
                     className="w-full rounded border border-slate-300 border-l-4 bg-white px-1 py-0.5 text-xs font-medium text-slate-700"

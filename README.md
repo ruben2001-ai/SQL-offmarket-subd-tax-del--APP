@@ -41,11 +41,12 @@ one; Supabase Auth handles the rest.
 ## Data model
 
 Two independent tables in the same Supabase project, both with a
-`pipeline_stage` column (`DNC / Leads / Potential Leads → Outreached →
-Responded → Qualified / Not Qualified → Underwriting → Offered → Follow-up →
-Accepted / Rejected / Long-term Follow-up` — DNC/Leads/Follow-up are legacy
-values kept for existing rows) and RLS restricted to `authenticated`
-read/write:
+`pipeline_stage` column (`DNC / Potential Leads → Outreached → Responded →
+Qualified / Not Qualified → Underwriting → Offered → Follow-up → Accepted /
+Rejected / Long-term Follow-up` — `Leads` was renamed into `Potential Leads`;
+`Follow-up` is a legacy value kept for existing rows; DNC is manually
+assigned, not auto-synced from reach method) and RLS restricted to
+`authenticated` read/write:
 
 - **`subdivide_outreach_leads`** — off-market subdivide-candidate parcels,
   cold-landowner SMS/email outreach (see `off-market-subdivide-outreach-cold-landowners`

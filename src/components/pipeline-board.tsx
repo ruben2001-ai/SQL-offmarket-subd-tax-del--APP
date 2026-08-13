@@ -80,7 +80,7 @@ function PipelineBoardInner({
     const map = new Map<PipelineStage, AnyLead[]>();
     for (const stage of PIPELINE_STAGES) map.set(stage, []);
     for (const lead of filtered) {
-      const stage = (lead.pipeline_stage as PipelineStage) ?? "Leads";
+      const stage = (lead.pipeline_stage as PipelineStage) ?? "Potential Leads";
       map.get(stage)?.push(lead);
     }
     return map;
@@ -182,7 +182,7 @@ function PipelineBoardInner({
       {
         key: "potential",
         label: "Potential Leads",
-        color: "var(--stage-potential)",
+        color: "var(--stage-leads)",
         count: potentialLeadsCount,
         percentOfTotal: pct(potentialLeadsCount, total),
         percentOfPrevious: null as number | null,
@@ -507,7 +507,7 @@ function LeadCard({
       </div>
 
       <select
-        value={lead.pipeline_stage ?? "Leads"}
+        value={lead.pipeline_stage ?? "Potential Leads"}
         onChange={(e) => onStageChange(e.target.value as PipelineStage)}
         className="mt-1.5 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[11px] text-slate-600"
       >
