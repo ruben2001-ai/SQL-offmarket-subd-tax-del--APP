@@ -194,14 +194,15 @@ export type TaxDelinquentLead = {
 
 export type AnyLead = Lead | TaxDelinquentLead;
 
-// Adds Potential Leads, Responded, Qualified, and Not Qualified alongside
-// the existing values — purely additive, so leads already sitting in DNC,
-// Leads, Follow-up, etc. stay exactly where they are. The Supabase CHECK
-// constraint on both tables was widened to match (see the migration named
-// widen_pipeline_stage_values).
+// "Leads" was renamed to "Potential Leads" (existing rows migrated, see the
+// rename_leads_to_potential_leads_and_dnc_backfill migration) so the two
+// no longer coexist as separate near-duplicate stages. DNC was also
+// backfilled from reach_method = 'MANUAL' leads still sitting untouched at
+// the time, as a one-time correction — it isn't kept in sync automatically
+// going forward. Responded/Qualified/Not Qualified remain additive, real,
+// manually-selectable stages alongside the rest.
 export const PIPELINE_STAGES = [
   "DNC",
-  "Leads",
   "Potential Leads",
   "Outreached",
   "Responded",
@@ -217,16 +218,15 @@ export const PIPELINE_STAGES = [
 
 export type PipelineStage = (typeof PIPELINE_STAGES)[number];
 
-// Categorical palette resolved via CSS vars in globals.css. The four new
-// slots (potential/responded/qualified/not-qualified) were chosen to differ
-// from their immediate neighbors in this list, matching the existing
-// adjacent-pair approach, but haven't been independently CVD-revalidated
-// the way the original 9-slot set was. Color is always paired with the
-// stage's text label, never used alone to carry meaning.
+// Categorical palette resolved via CSS vars in globals.css. The
+// responded/qualified/not-qualified slots were chosen to differ from their
+// immediate neighbors in this list, matching the existing adjacent-pair
+// approach, but haven't been independently CVD-revalidated the way the
+// original 9-slot set was. Color is always paired with the stage's text
+// label, never used alone to carry meaning.
 export const PIPELINE_STAGE_COLORS: Record<PipelineStage, string> = {
   DNC: "var(--stage-dnc)",
-  Leads: "var(--stage-leads)",
-  "Potential Leads": "var(--stage-potential)",
+  "Potential Leads": "var(--stage-leads)",
   Outreached: "var(--stage-outreached)",
   Responded: "var(--stage-responded)",
   Qualified: "var(--stage-qualified)",
