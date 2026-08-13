@@ -174,6 +174,7 @@ function PipelineBoardInner({
     const notQualifiedCount = count((m) => m.notQualified);
     const underwritingCount = count((m) => m.underwriting);
     const offeredCount = count((m) => m.offered);
+    const acceptedCount = count((m) => m.accepted);
     const rejectedCount = count((m) => m.rejected);
     const longTermFollowUpCount = count((m) => m.longTermFollowUp);
 
@@ -181,7 +182,7 @@ function PipelineBoardInner({
       {
         key: "potential",
         label: "Potential Leads",
-        color: "var(--stage-leads)",
+        color: "var(--stage-potential)",
         count: potentialLeadsCount,
         percentOfTotal: pct(potentialLeadsCount, total),
         percentOfPrevious: null as number | null,
@@ -199,7 +200,7 @@ function PipelineBoardInner({
       {
         key: "responded",
         label: "Responded",
-        color: "var(--stage-followup)",
+        color: "var(--stage-responded)",
         count: respondedCount,
         percentOfTotal: pct(respondedCount, total),
         percentOfPrevious: pct(respondedCount, outreachedCount),
@@ -208,7 +209,7 @@ function PipelineBoardInner({
       {
         key: "qualified",
         label: "Qualified",
-        color: "var(--stage-accepted)",
+        color: "var(--stage-qualified)",
         count: qualifiedCount,
         percentOfTotal: pct(qualifiedCount, total),
         percentOfPrevious: pct(qualifiedCount, respondedCount),
@@ -217,7 +218,7 @@ function PipelineBoardInner({
       {
         key: "notQualified",
         label: "Not Qualified",
-        color: "var(--stage-dnc)",
+        color: "var(--stage-not-qualified)",
         count: notQualifiedCount,
         percentOfTotal: pct(notQualifiedCount, total),
         percentOfPrevious: pct(notQualifiedCount, respondedCount),
@@ -240,6 +241,15 @@ function PipelineBoardInner({
         percentOfTotal: pct(offeredCount, total),
         percentOfPrevious: pct(offeredCount, underwritingCount),
         previousLabel: "Underwriting",
+      },
+      {
+        key: "accepted",
+        label: "Accepted",
+        color: "var(--stage-accepted)",
+        count: acceptedCount,
+        percentOfTotal: pct(acceptedCount, total),
+        percentOfPrevious: pct(acceptedCount, offeredCount),
+        previousLabel: "Offered",
       },
       {
         key: "rejected",

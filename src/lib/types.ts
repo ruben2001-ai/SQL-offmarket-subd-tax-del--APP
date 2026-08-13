@@ -194,10 +194,19 @@ export type TaxDelinquentLead = {
 
 export type AnyLead = Lead | TaxDelinquentLead;
 
+// Adds Potential Leads, Responded, Qualified, and Not Qualified alongside
+// the existing values — purely additive, so leads already sitting in DNC,
+// Leads, Follow-up, etc. stay exactly where they are. The Supabase CHECK
+// constraint on both tables was widened to match (see the migration named
+// widen_pipeline_stage_values).
 export const PIPELINE_STAGES = [
   "DNC",
   "Leads",
+  "Potential Leads",
   "Outreached",
+  "Responded",
+  "Qualified",
+  "Not Qualified",
   "Underwriting",
   "Offered",
   "Follow-up",
@@ -208,15 +217,20 @@ export const PIPELINE_STAGES = [
 
 export type PipelineStage = (typeof PIPELINE_STAGES)[number];
 
-// Validated 9-slot categorical palette (dataviz skill default order extended
-// with a red DNC slot up front — resolved via CSS vars in globals.css so
-// light/dark both stay within the validated adjacent-pair CVD gates). Color
-// is always paired with the stage's text label, never used alone to carry
-// meaning.
+// Categorical palette resolved via CSS vars in globals.css. The four new
+// slots (potential/responded/qualified/not-qualified) were chosen to differ
+// from their immediate neighbors in this list, matching the existing
+// adjacent-pair approach, but haven't been independently CVD-revalidated
+// the way the original 9-slot set was. Color is always paired with the
+// stage's text label, never used alone to carry meaning.
 export const PIPELINE_STAGE_COLORS: Record<PipelineStage, string> = {
   DNC: "var(--stage-dnc)",
   Leads: "var(--stage-leads)",
+  "Potential Leads": "var(--stage-potential)",
   Outreached: "var(--stage-outreached)",
+  Responded: "var(--stage-responded)",
+  Qualified: "var(--stage-qualified)",
+  "Not Qualified": "var(--stage-not-qualified)",
   Underwriting: "var(--stage-underwriting)",
   Offered: "var(--stage-offered)",
   "Follow-up": "var(--stage-followup)",
